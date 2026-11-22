@@ -20,7 +20,7 @@ public abstract class ClientWorldMixin {
     @Inject(method = "handleBlockUpdate", at = @At("HEAD"))
     private void schematicArrows$markChunkDirty(BlockPos pos, BlockState state, int flags, CallbackInfo ci) {
         if (SchematicArrowsClient.isEnabled()) {
-            ArrowManager.markDirty(pos.getX() >> 4, pos.getZ() >> 4);
+            ArrowManager.markBlockDirty(pos.getX(), pos.getY(), pos.getZ());
         }
     }
 }

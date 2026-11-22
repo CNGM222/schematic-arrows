@@ -49,7 +49,7 @@ public final class SchematicArrowsClient implements ClientModInitializer {
         });
         WorldRenderEvents.END_MAIN.register(ArrowRenderer::render);
         ClientChunkEvents.CHUNK_LOAD.register((world, chunk) ->
-                ArrowManager.markDirty(chunk.getPos().x, chunk.getPos().z));
+                ArrowManager.markChunkDirty(chunk.getPos().x, chunk.getPos().z));
         ClientChunkEvents.CHUNK_UNLOAD.register((world, chunk) ->
                 ArrowManager.forgetChunk(chunk.getPos().x, chunk.getPos().z));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ArrowManager.clear());

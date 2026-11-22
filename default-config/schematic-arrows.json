@@ -1,8 +1,8 @@
 {
   "startEnabled": true,
   "maxArrows": 96,
-  "chunksPerTick": 4,
-  "scanRadius": 0,
+  "chunksPerTick": 2,
+  "scanRadius": 64,
   "scanThreads": 2,
   "onlySelectedPlacement": false,
   "arrowRadius": 0.24,

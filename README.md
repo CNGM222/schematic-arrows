@@ -32,7 +32,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 - 投影覆盖到的每个 16×16 区块都缓存一份结果，**和玩家位置无关**：转视角、走路、飞走再回来，
   箭头都还在，不会因为离开范围被清掉；
 - 只有两种情况会让某个区块**重新扫描**：
-  - 这个区块里有方块被放置/破坏（打印、手放、活塞等都以方块更新的形式到这里）；
+  - 这个位置有方块被放置/破坏（只重新检查这一格，不会重扫整个区块）；
   - 区块刚加载，或者投影 / 设置本身改变；
 - 背包变化**不触发扫描**：缓存里保留“待放置位置 + 需要的物品”，合并箭头列表时按当前背包过滤，
   材料用完后箭头 1~2 tick 内消失，重新捡到马上回来；
@@ -51,7 +51,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | MaLiLib | 1.21.11-0.27.20 |
 | Litematica | 1.21.11-0.26.16 |
 | Litematica Printer | 你平时自动放置用的那个版本 |
-| 本 mod | `schematic-arrows-1.5.1.jar` |
+| 本 mod | `schematic-arrows-1.5.2.jar` |
 
 启动游戏即可：**V** 开关箭头，**右 Shift** 打开设置界面（两个键都能在“选项 → 控制 → 按键绑定 → 原理图箭头”里改）。
 
@@ -87,8 +87,8 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | --- | --- | --- |
 | `startEnabled` | `true` | 进游戏时是否默认开启 |
 | `maxArrows` | `96` | 最多高亮多少方块（最近的优先） |
-| `chunksPerTick` | `4` | 每 tick 最多提交几个区块去扫描 |
-| `scanRadius` | `0` | 扫描半径（格）；0 = 整个投影。已缓存的箭头不会因离开范围被删 |
+| `chunksPerTick` | `2` | 每 tick 最多提交几个区块去扫描 |
+| `scanRadius` | `64` | 扫描半径（格）；0 = 整个投影。已缓存的箭头不会因离开范围被删 |
 | `scanThreads` | `2` | 扫描用的后台线程数；0 = 主线程扫描，上限 = CPU 线程数 |
 | `onlySelectedPlacement` | `false` | `true` = 只处理 Litematica 里当前选中的投影 |
 | `arrowRadius` | `0.24` | 箭头头的半宽（格） |
@@ -155,7 +155,7 @@ build.cmd build
 
 `build.cmd` 会优先用本地的 `..\tools\gradle-9.9.2`，没有就用 PATH 里的 `gradle`。
 
-产物：`build/libs/schematic-arrows-1.5.1.jar`
+产物：`build/libs/schematic-arrows-1.5.2.jar`
 
 `libs/` 里的 Litematica / MaLiLib jar 只用于编译（`modCompileOnly`），不会被打进成品。
 

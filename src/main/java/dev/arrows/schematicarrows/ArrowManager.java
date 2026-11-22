@@ -40,16 +40,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Finds the schematic blocks that still have to be placed and the ones that were
  * placed wrongly, with a per-chunk cache that is independent of the player.
  *
- * <p>The whole placement is cached, not a radius around the player, so turning,
- * walking or flying never removes a marker. A chunk is only rescanned when:</p>
- * <ul>
- *   <li>a block in it changed (the printer placed something, or the player did),</li>
- *   <li>it just loaded, or the placement / settings changed.</li>
- * </ul>
- *
- * <p>Chunk scans run on a small worker pool; the client thread only submits the
- * chunk bounds and merges the finished results. Inventory changes never scan:
- * the merge step filters the cached targets by what the player is carrying.</p>
+ * <p>A single placed block only re-checks that position, never the whole chunk;
+ * chunks are only rescanned when they load, when the placement or the settings
+ * change, or on the first scan. Markers therefore persist across turning,
+ * walking and flying, and the per-tick cost stays tiny.</p>
  */
 public final class ArrowManager {
     public enum Kind {
@@ -62,12 +56,16 @@ public final class ArrowManager {
     public record Target(BlockPos pos, Item item, Kind kind, double distSq) {
     }
 
-    /** Cached scan result of one 16x16 chunk column. */
-    private record ChunkScan(List<Target> targets, int scannedAt) {
+    /** Cached scan result of one 16x16 chunk column. Mutable: single block updates patch it. */
+    private record ChunkScan(Map<BlockPos, Target> targets, int scannedAt) {
     }
 
     /** A box clipped to one chunk, ready to be walked by a worker thread. */
     private record Bounds(int x1, int y1, int z1, int x2, int y2, int z2) {
+    }
+
+    /** Absolute box, collected once per tick on the client thread. */
+    private record BoxBounds(int x1, int y1, int z1, int x2, int y2, int z2) {
     }
 
     private record ChunkTask(long key, int generation, int chunkX, int chunkZ,
@@ -77,14 +75,12 @@ public final class ArrowManager {
     private record ChunkResult(long key, int generation, List<Target> targets) {
     }
 
-    /** Absolute box, collected once per tick on the client thread. */
-    private record BoxBounds(int x1, int y1, int z1, int x2, int y2, int z2) {
-    }
-
     private static final Logger LOGGER = LoggerFactory.getLogger("schematic-arrows");
-    private static final int MERGE_INTERVAL_TICKS = 2;
+    private static final int MERGE_INTERVAL_TICKS = 4;
+    private static final int MAX_BLOCK_UPDATES_PER_TICK = 512;
     private static final Map<Long, ChunkScan> CACHE = new HashMap<>();
-    private static final Set<Long> DIRTY = new LinkedHashSet<>();
+    private static final Set<Long> CHUNK_DIRTY = new LinkedHashSet<>();
+    private static final Set<BlockPos> BLOCK_DIRTY = new LinkedHashSet<>();
     private static final ArrayList<Target> TARGETS = new ArrayList<>();
     private static final ConcurrentLinkedQueue<ChunkResult> RESULTS = new ConcurrentLinkedQueue<>();
     private static final AtomicInteger IN_FLIGHT = new AtomicInteger();
@@ -112,22 +108,27 @@ public final class ArrowManager {
         return TARGETS;
     }
 
-    /** Called from the block-update hook: the chunk's contents may have changed. */
-    public static void markDirty(int chunkX, int chunkZ) {
-        DIRTY.add(ChunkPos.toLong(chunkX, chunkZ));
+    /** Called from the block-update hook: only this position has to be re-checked. */
+    public static void markBlockDirty(int x, int y, int z) {
+        BLOCK_DIRTY.add(new BlockPos(x, y, z));
+    }
+
+    public static void markChunkDirty(int chunkX, int chunkZ) {
+        CHUNK_DIRTY.add(ChunkPos.toLong(chunkX, chunkZ));
     }
 
     public static void forgetChunk(int chunkX, int chunkZ) {
         long key = ChunkPos.toLong(chunkX, chunkZ);
         CACHE.remove(key);
-        DIRTY.remove(key);
+        CHUNK_DIRTY.remove(key);
         needsMerge = true;
     }
 
     public static void clear() {
         generation++;
         CACHE.clear();
-        DIRTY.clear();
+        CHUNK_DIRTY.clear();
+        BLOCK_DIRTY.clear();
         TARGETS.clear();
         RESULTS.clear();
         IN_FLIGHT_KEYS.clear();
@@ -204,11 +205,11 @@ public final class ArrowManager {
         if (rebuild) {
             generation++;
             CACHE.clear();
-            DIRTY.clear();
+            CHUNK_DIRTY.clear();
+            BLOCK_DIRTY.clear();
             TARGETS.clear();
             RESULTS.clear();
-            // Chunks with a scan still in flight would otherwise be lost.
-            DIRTY.addAll(IN_FLIGHT_KEYS);
+            CHUNK_DIRTY.addAll(IN_FLIGHT_KEYS);
             IN_FLIGHT_KEYS.clear();
             IN_FLIGHT.set(0);
             needsMerge = true;
@@ -216,10 +217,10 @@ public final class ArrowManager {
         }
 
         drainResults();
+        applyBlockUpdates(world, schematicWorld, config);
 
         Map<Item, Integer> counts = availableCounts(player);
         if (!counts.equals(lastCounts)) {
-            // Inventory changes never rescan: the merge step filters by the items carried.
             needsMerge = true;
             lastCounts = Map.copyOf(counts);
         }
@@ -237,11 +238,61 @@ public final class ArrowManager {
         if (changedChunk && config.scanRadius > 0) {
             enqueueForRadius(placements, schematicChunks, player, config.scanRadius);
         }
+
         if (needsMerge && tick - lastMergeTick >= MERGE_INTERVAL_TICKS) {
             merge(player, config, counts);
             lastMergeTick = tick;
             needsMerge = false;
         }
+    }
+
+    /** Re-checks the positions the block-update hook reported, without touching their chunk. */
+    private static void applyBlockUpdates(ClientWorld world, WorldSchematic schematicWorld, ArrowsConfig config) {
+        if (BLOCK_DIRTY.isEmpty()) {
+            return;
+        }
+        int processed = 0;
+        Iterator<BlockPos> iterator = BLOCK_DIRTY.iterator();
+        while (iterator.hasNext() && processed < MAX_BLOCK_UPDATES_PER_TICK) {
+            BlockPos pos = iterator.next();
+            iterator.remove();
+            processed++;
+            long key = ChunkPos.toLong(pos.getX() >> 4, pos.getZ() >> 4);
+            ChunkScan scan = CACHE.get(key);
+            if (scan == null) {
+                // Not scanned yet: let the normal chunk scan pick it up.
+                CHUNK_DIRTY.add(key);
+                continue;
+            }
+            Target target = evaluate(pos, world, schematicWorld, config.showWrongBlocks, config.showExtraBlocks);
+            if (target == null) {
+                scan.targets().remove(pos);
+            } else {
+                scan.targets().put(pos, target);
+            }
+            needsMerge = true;
+        }
+    }
+
+    private static Target evaluate(BlockPos pos, ClientWorld world, WorldSchematic schematicWorld,
+                                   boolean showWrong, boolean showExtra) {
+        BlockState required = schematicWorld.getBlockState(pos);
+        BlockState current = world.getBlockState(pos);
+        if (current == required) {
+            return null;
+        }
+        boolean requiredIsEmpty = isEmpty(required);
+        boolean currentIsEmpty = isEmpty(current);
+        if (requiredIsEmpty) {
+            return showExtra && !currentIsEmpty
+                    ? new Target(pos, Items.AIR, Kind.EXTRA, 0.0)
+                    : null;
+        }
+        if (currentIsEmpty) {
+            Item item = required.getBlock().asItem();
+            return item == Items.AIR ? null : new Target(pos, item, Kind.MISSING, 0.0);
+        }
+        return showWrong ? new Target(pos, required.getBlock().asItem(), Kind.WRONG, 0.0) : null;
     }
 
     private static void drainResults() {
@@ -252,7 +303,11 @@ public final class ArrowManager {
             if (result.generation() != generation) {
                 continue;
             }
-            CACHE.put(result.key(), new ChunkScan(result.targets(), tick));
+            Map<BlockPos, Target> targets = new HashMap<>(Math.max(4, result.targets().size() * 2));
+            for (Target target : result.targets()) {
+                targets.put(target.pos(), target);
+            }
+            CACHE.put(result.key(), new ChunkScan(targets, tick));
             needsMerge = true;
         }
     }
@@ -264,7 +319,7 @@ public final class ArrowManager {
         int perTick = Math.max(1, config.chunksPerTick);
         int inFlightLimit = Math.max(threads, 1) * 4;
         int submitted = 0;
-        Iterator<Long> iterator = DIRTY.iterator();
+        Iterator<Long> iterator = CHUNK_DIRTY.iterator();
         while (iterator.hasNext() && submitted < perTick) {
             long key = iterator.next();
             iterator.remove();
@@ -272,20 +327,21 @@ public final class ArrowManager {
             int chunkZ = (int) (key >>> 32);
             List<Bounds> regions = regionsForChunk(boxes, chunkX, chunkZ);
             if (regions.isEmpty()) {
-                CACHE.put(key, new ChunkScan(List.of(), tick));
+                CACHE.put(key, new ChunkScan(new HashMap<>(), tick));
                 needsMerge = true;
                 submitted++;
                 continue;
             }
             if (threads <= 0) {
-                CACHE.put(key, new ChunkScan(scan(regions, schematicWorld, world,
-                        config.showWrongBlocks, config.showExtraBlocks), tick));
+                Map<BlockPos, Target> scanned = scanIntoMap(regions, schematicWorld, world,
+                        config.showWrongBlocks, config.showExtraBlocks);
+                CACHE.put(key, new ChunkScan(scanned, tick));
                 needsMerge = true;
                 submitted++;
                 continue;
             }
             if (IN_FLIGHT.get() >= inFlightLimit) {
-                DIRTY.add(key);
+                CHUNK_DIRTY.add(key);
                 break;
             }
             ChunkTask task = new ChunkTask(key, generation, chunkX, chunkZ, regions,
@@ -308,6 +364,15 @@ public final class ArrowManager {
             });
             submitted++;
         }
+    }
+
+    private static Map<BlockPos, Target> scanIntoMap(List<Bounds> regions, WorldSchematic schematicWorld,
+                                                    ClientWorld world, boolean showWrong, boolean showExtra) {
+        Map<BlockPos, Target> targets = new HashMap<>();
+        for (Target target : scan(regions, schematicWorld, world, showWrong, showExtra)) {
+            targets.put(target.pos(), target);
+        }
+        return targets;
     }
 
     /** Collects every placement box once per tick; the clipping to chunks stays cheap. */
@@ -368,26 +433,9 @@ public final class ArrowManager {
                         if (!seen.add(pos)) {
                             continue;
                         }
-                        BlockState required = schematicWorld.getBlockState(pos);
-                        BlockState current = world.getBlockState(pos);
-                        if (current == required) {
-                            continue;
-                        }
-                        boolean requiredIsEmpty = isEmpty(required);
-                        boolean currentIsEmpty = isEmpty(current);
-                        if (requiredIsEmpty) {
-                            if (showExtra && !currentIsEmpty) {
-                                found.add(new Target(pos, Items.AIR, Kind.EXTRA, 0.0));
-                            }
-                            continue;
-                        }
-                        if (currentIsEmpty) {
-                            Item item = required.getBlock().asItem();
-                            if (item != Items.AIR) {
-                                found.add(new Target(pos, item, Kind.MISSING, 0.0));
-                            }
-                        } else if (showWrong) {
-                            found.add(new Target(pos, required.getBlock().asItem(), Kind.WRONG, 0.0));
+                        Target target = evaluate(pos, world, schematicWorld, showWrong, showExtra);
+                        if (target != null) {
+                            found.add(target);
                         }
                     }
                 }
@@ -404,7 +452,7 @@ public final class ArrowManager {
             }
             for (ChunkPos chunk : placement.getTouchedChunks()) {
                 if (schematicChunks.getChunkIfExists(chunk.x, chunk.z) != null) {
-                    DIRTY.add(ChunkPos.toLong(chunk.x, chunk.z));
+                    CHUNK_DIRTY.add(ChunkPos.toLong(chunk.x, chunk.z));
                 }
             }
         }
@@ -412,8 +460,7 @@ public final class ArrowManager {
 
     /**
      * Queues chunks to scan: the whole placement when {@code radius <= 0}, otherwise the
-     * square around the player. Chunks that already have a cached scan are skipped, so
-     * walking around does not rescan anything.
+     * square around the player. Chunks that already have a cached scan are skipped.
      */
     private static void enqueueForRadius(List<SchematicPlacement> placements, ChunkManagerSchematic schematicChunks,
                                          ClientPlayerEntity player, int radius) {
@@ -429,22 +476,45 @@ public final class ArrowManager {
             for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
                 long key = ChunkPos.toLong(chunkX, chunkZ);
                 if (!CACHE.containsKey(key)) {
-                    DIRTY.add(key);
+                    CHUNK_DIRTY.add(key);
                 }
             }
         }
     }
 
     private static void merge(ClientPlayerEntity player, ArrowsConfig config, Map<Item, Integer> counts) {
-        List<Target> missing = new ArrayList<>();
-        List<Target> wrong = new ArrayList<>();
         double playerX = player.getX();
         double playerY = player.getY();
         double playerZ = player.getZ();
-        for (ChunkScan scan : CACHE.values()) {
-            for (Target target : scan.targets()) {
-                if (target.kind() == Kind.MISSING && counts.getOrDefault(target.item(), 0) <= 0) {
-                    // The stack ran out since this chunk was scanned: hide the arrows now.
+        int playerChunkX = player.getBlockPos().getX() >> 4;
+        int playerChunkZ = player.getBlockPos().getZ() >> 4;
+        int maxMissing = Math.max(1, config.maxArrows);
+        int maxWrong = Math.max(1, config.maxBadMarkers);
+
+        // Nearest chunks first, bounded number of candidates: the cache can hold tens of
+        // thousands of targets, and far ones can never win the "nearest N" selection.
+        List<Long> keys = new ArrayList<>(CACHE.keySet());
+        keys.sort(Comparator.comparingLong(key -> chunkDistance(key, playerChunkX, playerChunkZ)));
+        List<Target> missing = new ArrayList<>(maxMissing * 2);
+        List<Target> wrong = new ArrayList<>(maxWrong * 2);
+        int missingSlack = maxMissing * 4;
+        int wrongSlack = maxWrong * 2;
+        int visited = 0;
+        int visitLimit = Math.max(4096, maxMissing * 32);
+        for (long key : keys) {
+            if (visited >= visitLimit || (missing.size() >= missingSlack && wrong.size() >= wrongSlack)) {
+                break;
+            }
+            ChunkScan scan = CACHE.get(key);
+            if (scan == null) {
+                continue;
+            }
+            for (Target target : scan.targets().values()) {
+                if (++visited > visitLimit) {
+                    break;
+                }
+                boolean isMissing = target.kind() == Kind.MISSING;
+                if (isMissing && counts.getOrDefault(target.item(), 0) <= 0) {
                     continue;
                 }
                 BlockPos pos = target.pos();
@@ -453,7 +523,7 @@ public final class ArrowManager {
                 double dz = pos.getZ() + 0.5 - playerZ;
                 Target withDistance = new Target(pos, target.item(), target.kind(),
                         dx * dx + dy * dy + dz * dz);
-                if (target.kind() == Kind.MISSING) {
+                if (isMissing) {
                     missing.add(withDistance);
                 } else {
                     wrong.add(withDistance);
@@ -463,12 +533,11 @@ public final class ArrowManager {
         Comparator<Target> byDistance = Comparator.comparingDouble(Target::distSq);
         missing.sort(byDistance);
         wrong.sort(byDistance);
-        int maxWrong = Math.min(wrong.size(), Math.max(1, config.maxBadMarkers));
-        int maxMissing = Math.max(1, config.maxArrows);
+        int acceptedWrong = Math.min(wrong.size(), maxWrong);
         TARGETS.clear();
-        TARGETS.ensureCapacity(maxWrong + Math.min(missing.size(), maxMissing));
+        TARGETS.ensureCapacity(acceptedWrong + Math.min(missing.size(), maxMissing));
         // Wrongly placed blocks are the more urgent problem, so they are listed first.
-        TARGETS.addAll(wrong.subList(0, maxWrong));
+        TARGETS.addAll(wrong.subList(0, acceptedWrong));
         // Never show more arrows for an item than the player can actually place.
         Map<Item, Integer> remaining = new HashMap<>(counts);
         int accepted = 0;
@@ -486,6 +555,14 @@ public final class ArrowManager {
         }
     }
 
+    private static long chunkDistance(long key, int playerChunkX, int playerChunkZ) {
+        int chunkX = (int) (key & 0xFFFFFFFFL);
+        int chunkZ = (int) (key >>> 32);
+        long dx = chunkX - playerChunkX;
+        long dz = chunkZ - playerChunkZ;
+        return dx * dx + dz * dz;
+    }
+
     private static void ensureExecutor(int threads) {
         int wanted = Math.max(0, Math.min(ArrowsConfig.maxScanThreads(), threads));
         if (executorThreads == wanted) {
@@ -495,8 +572,8 @@ public final class ArrowManager {
             executor.shutdownNow();
             executor = null;
             generation++;
-            DIRTY.addAll(CACHE.keySet());
-            DIRTY.addAll(IN_FLIGHT_KEYS);
+            CHUNK_DIRTY.addAll(CACHE.keySet());
+            CHUNK_DIRTY.addAll(IN_FLIGHT_KEYS);
             IN_FLIGHT_KEYS.clear();
             IN_FLIGHT.set(0);
             RESULTS.clear();
@@ -506,7 +583,7 @@ public final class ArrowManager {
             executor = Executors.newFixedThreadPool(wanted, runnable -> {
                 Thread thread = new Thread(runnable, "schematic-arrows-scan");
                 thread.setDaemon(true);
-                thread.setPriority(Thread.MIN_PRIORITY + 1);
+                thread.setPriority(Thread.MIN_PRIORITY);
                 return thread;
             });
         }

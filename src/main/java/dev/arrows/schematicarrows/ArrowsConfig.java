@@ -28,13 +28,13 @@ public final class ArrowsConfig {
     public int maxArrows = 96;
 
     /** How many chunk scans may be submitted per client tick. */
-    public int chunksPerTick = 4;
+    public int chunksPerTick = 2;
 
     /** Worker threads used for chunk scanning. 0 = scan on the client thread. */
     public int scanThreads = 2;
 
     /** Scan radius in blocks around the player. 0 = the whole placement. */
-    public int scanRadius = 0;
+    public int scanRadius = 64;
 
     /** Upper bound for {@link #scanThreads}: the number of logical CPU cores. */
     public static int maxScanThreads() {
