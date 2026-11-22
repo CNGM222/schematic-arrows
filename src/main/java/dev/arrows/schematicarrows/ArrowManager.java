@@ -62,6 +62,7 @@ public final class ArrowManager {
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger("schematic-arrows");
+    private static final int MERGE_INTERVAL_TICKS = 2;
     private static final Map<Long, ChunkScan> CACHE = new HashMap<>();
     private static final Set<Long> DIRTY = new LinkedHashSet<>();
     private static final ArrayList<Target> TARGETS = new ArrayList<>();
@@ -74,6 +75,8 @@ public final class ArrowManager {
     private static ClientWorld lastWorld;
     private static int lastPlayerBlockY = Integer.MIN_VALUE;
     private static BlockPos lastPlayerPos;
+    private static Set<Item> lastAvailable = Set.of();
+    private static int lastMergeTick;
     private static boolean needsMerge = true;
 
     private ArrowManager() {
@@ -103,6 +106,8 @@ public final class ArrowManager {
         lastPlacementSignature = Long.MIN_VALUE;
         lastPlayerBlockY = Integer.MIN_VALUE;
         lastPlayerPos = null;
+        lastAvailable = Set.of();
+        lastMergeTick = 0;
         needsMerge = true;
     }
 
@@ -224,6 +229,13 @@ public final class ArrowManager {
         }
 
         Set<Item> available = availableItems(player);
+        if (!available.equals(lastAvailable)) {
+            // Arrows follow the inventory immediately; the cached targets keep their item,
+            // so both losing and regaining a material only needs a merge here.
+            needsMerge = true;
+            lastAvailable = Set.copyOf(available);
+        }
+
         int chunksPerTick = Math.max(1, config.chunksPerTick);
         long positionBudget = Math.max(1_000L, config.scanBudget);
         long[] budget = {positionBudget};
@@ -236,7 +248,7 @@ public final class ArrowManager {
             if (chunkX < minChunkX || chunkX > maxChunkX || chunkZ < minChunkZ || chunkZ > maxChunkZ) {
                 continue;
             }
-            CACHE.put(key, scanChunk(world, schematicWorld, schematicChunks, placements, available,
+            CACHE.put(key, scanChunk(world, schematicWorld, schematicChunks, placements,
                     config, chunkX, chunkZ, minY, maxY, budget));
             chunksPerTick--;
             needsMerge = true;
@@ -246,8 +258,11 @@ public final class ArrowManager {
             lastPlayerPos = playerPos;
             needsMerge = true;
         }
-        if (needsMerge) {
-            merge(player, minY, maxY, config);
+        // Merging walks every cached target, so it is throttled; inventory changes and
+        // fresh chunk scans still show up within a couple of ticks.
+        if (needsMerge && tick - lastMergeTick >= MERGE_INTERVAL_TICKS) {
+            merge(player, minY, maxY, config, available);
+            lastMergeTick = tick;
             needsMerge = false;
         }
     }
@@ -262,7 +277,7 @@ public final class ArrowManager {
 
     private static ChunkScan scanChunk(ClientWorld world, WorldSchematic schematicWorld,
                                        ChunkManagerSchematic schematicChunks,
-                                       List<SchematicPlacement> placements, Set<Item> available,
+                                       List<SchematicPlacement> placements,
                                        ArrowsConfig config, int chunkX, int chunkZ, int minY, int maxY,
                                        long[] budget) {
         List<Target> found = new ArrayList<>();
@@ -319,10 +334,9 @@ public final class ArrowManager {
                                 }
                                 if (currentIsEmpty) {
                                     Item item = required.getBlock().asItem();
-                                    if (item == Items.AIR || !available.contains(item)) {
-                                        continue;
+                                    if (item != Items.AIR) {
+                                        found.add(new Target(pos, item, Kind.MISSING, 0.0));
                                     }
-                                    found.add(new Target(pos, item, Kind.MISSING, 0.0));
                                 } else if (config.showWrongBlocks) {
                                     found.add(new Target(pos, required.getBlock().asItem(), Kind.WRONG, 0.0));
                                 }
@@ -335,7 +349,8 @@ public final class ArrowManager {
         return new ChunkScan(List.copyOf(found), minY, maxY, tick);
     }
 
-    private static void merge(ClientPlayerEntity player, int minY, int maxY, ArrowsConfig config) {
+    private static void merge(ClientPlayerEntity player, int minY, int maxY, ArrowsConfig config,
+                              Set<Item> available) {
         List<Target> missing = new ArrayList<>();
         List<Target> wrong = new ArrayList<>();
         double playerX = player.getX();
@@ -343,6 +358,10 @@ public final class ArrowManager {
         double playerZ = player.getZ();
         for (ChunkScan scan : CACHE.values()) {
             for (Target target : scan.targets()) {
+                if (target.kind() == Kind.MISSING && !available.contains(target.item())) {
+                    // The stack ran out since this chunk was scanned: hide the arrows now.
+                    continue;
+                }
                 BlockPos pos = target.pos();
                 if (pos.getY() < minY || pos.getY() > maxY) {
                     continue;

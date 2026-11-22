@@ -47,7 +47,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | MaLiLib | 1.21.11-0.27.20 |
 | Litematica | 1.21.11-0.26.16 |
 | Litematica Printer | 你平时自动放置用的那个版本 |
-| 本 mod | `schematic-arrows-1.3.0.jar` |
+| 本 mod | `schematic-arrows-1.3.1.jar` |
 
 启动游戏即可：**V** 开关箭头，**右 Shift** 打开设置界面（两个键都能在“选项 → 控制 → 按键绑定 → 原理图箭头”里改）。
 
@@ -118,6 +118,9 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 - 只扫描玩家附近的区域，远处不显示（性能考虑）；上限见 `horizontalRadius` / `maxArrows`。
 - 转视角、走路不会触发重扫；只有区块内容变化、区块进出范围、投影/设置变化或玩家高度变化才会重扫，
   且每 tick 最多扫 `chunksPerTick` 个区块，所以不会出现整帧卡顿。
+- 背包里某种材料用完后，对应的待放置箭头会在 1~2 tick 内消失（合并时按当前背包过滤，不需要重扫）；
+  重新捡到材料时箭头马上回来，因为缓存里保留了位置和物品种类。
+- 合并（把缓存整理成最终箭头列表）每 2 tick 最多做一次，避免大量候选时每 tick 排序。
 - 需要投影渲染开启；投影整体隐藏时读不到方块，自然也不会显示箭头。
 - 箭头有深度测试，被方块挡住时不会透视显示。
 - 判定“未放置”= 世界方块状态与投影状态不是同一个状态；朝向不同也算未完成（正好提醒哪里要修正）。
@@ -148,7 +151,7 @@ build.cmd build
 
 `build.cmd` 会优先用本地的 `..\tools\gradle-9.9.2`，没有就用 PATH 里的 `gradle`。
 
-产物：`build/libs/schematic-arrows-1.3.0.jar`
+产物：`build/libs/schematic-arrows-1.3.1.jar`
 
 `libs/` 里的 Litematica / MaLiLib jar 只用于编译（`modCompileOnly`），不会被打进成品。
 
