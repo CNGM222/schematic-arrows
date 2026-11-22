@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "schematic_arrows",
+  "version": "${version}",
+  "name": "Schematic Arrows",
+  "description": "Highlights the schematic blocks you still have to print: for every block whose item is in your inventory, an arrow is drawn above and below the target position, both pointing at the block. Toggle with one key.",
+  "authors": [
+    "CNGM222"
+  ],
+  "contact": {
+    "sources": "https://github.com/CNGM222/schematic-arrows",
+    "issues": "https://github.com/CNGM222/schematic-arrows/issues"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.arrows.schematicarrows.SchematicArrowsClient"
+    ]
+  },
+  "mixins": [
+    "schematic_arrows.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "litematica": "*",
+    "malilib": "*"
+  }
+}
