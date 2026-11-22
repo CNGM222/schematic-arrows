@@ -33,6 +33,11 @@ public final class ArrowsConfig {
     /** Worker threads used for chunk scanning. 0 = scan on the client thread. */
     public int scanThreads = 2;
 
+    /** Upper bound for {@link #scanThreads}: the number of logical CPU cores. */
+    public static int maxScanThreads() {
+        return Math.max(1, Runtime.getRuntime().availableProcessors());
+    }
+
     /** Only look at the placement currently selected in Litematica. */
     public boolean onlySelectedPlacement = false;
 
@@ -127,6 +132,7 @@ public final class ArrowsConfig {
                     config = read;
                 }
             }
+            config.scanThreads = Math.max(0, Math.min(maxScanThreads(), config.scanThreads));
             config.save();
         } catch (Exception e) {
             LOGGER.warn("Failed to load {}, using defaults", PATH, e);

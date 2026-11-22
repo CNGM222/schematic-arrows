@@ -36,8 +36,8 @@ public final class ArrowsConfigScreen extends GameOptionsScreen {
                 config.maxArrows, value -> config.maxArrows = value));
         body.addSingleOptionEntry(intOption("schematic_arrows.config.chunks_per_tick", 1, 16,
                 config.chunksPerTick, value -> config.chunksPerTick = value));
-        body.addSingleOptionEntry(intOption("schematic_arrows.config.scan_threads", 0, 8,
-                config.scanThreads, value -> config.scanThreads = value));
+        body.addSingleOptionEntry(intOption("schematic_arrows.config.scan_threads", 0,
+                ArrowsConfig.maxScanThreads(), config.scanThreads, value -> config.scanThreads = value));
         body.addSingleOptionEntry(booleanOption("schematic_arrows.config.only_selected",
                 config.onlySelectedPlacement, value -> config.onlySelectedPlacement = value));
 

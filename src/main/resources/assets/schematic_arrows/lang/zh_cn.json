@@ -18,7 +18,7 @@
   "schematic_arrows.config.chunks_per_tick": "每 tick 提交区块数",
   "schematic_arrows.config.chunks_per_tick.tooltip": "每 tick 最多提交几个区块去扫描，调大首次扫描更快。",
   "schematic_arrows.config.scan_threads": "扫描线程数",
-  "schematic_arrows.config.scan_threads.tooltip": "用几个后台线程扫描区块。0 = 在主线程扫描（最保守），1~4 比较合适。",
+  "schematic_arrows.config.scan_threads.tooltip": "用几个后台线程扫描区块。上限是本机 CPU 线程数，0 = 在主线程扫描（最保守）。",
   "schematic_arrows.config.only_selected": "只处理选中的投影",
   "schematic_arrows.config.only_selected.tooltip": "开启后只看 Litematica 里当前选中的那个投影。",
 

@@ -18,7 +18,7 @@
   "schematic_arrows.config.chunks_per_tick": "Chunks submitted per tick",
   "schematic_arrows.config.chunks_per_tick.tooltip": "How many chunks may be queued for scanning per tick. Higher fills the cache faster.",
   "schematic_arrows.config.scan_threads": "Scan threads",
-  "schematic_arrows.config.scan_threads.tooltip": "Background worker threads for chunk scanning. 0 scans on the client thread; 1-4 is a good range.",
+  "schematic_arrows.config.scan_threads.tooltip": "Background worker threads for chunk scanning. Capped at the CPU thread count; 0 scans on the client thread.",
   "schematic_arrows.config.only_selected": "Only the selected placement",
   "schematic_arrows.config.only_selected.tooltip": "Only look at the placement currently selected in Litematica.",
 

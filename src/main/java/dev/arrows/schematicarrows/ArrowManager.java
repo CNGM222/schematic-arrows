@@ -441,7 +441,7 @@ public final class ArrowManager {
     }
 
     private static void ensureExecutor(int threads) {
-        int wanted = Math.max(0, Math.min(8, threads));
+        int wanted = Math.max(0, Math.min(ArrowsConfig.maxScanThreads(), threads));
         if (executorThreads == wanted) {
             return;
         }

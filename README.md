@@ -88,7 +88,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | `startEnabled` | `true` | 进游戏时是否默认开启 |
 | `maxArrows` | `96` | 最多高亮多少方块（最近的优先） |
 | `chunksPerTick` | `4` | 每 tick 最多提交几个区块去扫描 |
-| `scanThreads` | `2` | 扫描用的后台线程数；0 = 主线程扫描 |
+| `scanThreads` | `2` | 扫描用的后台线程数；0 = 主线程扫描，上限 = CPU 线程数 |
 | `onlySelectedPlacement` | `false` | `true` = 只处理 Litematica 里当前选中的投影 |
 | `arrowRadius` | `0.24` | 箭头头的半宽（格） |
 | `arrowHeight` | `0.38` | 箭头头长度（格） |
