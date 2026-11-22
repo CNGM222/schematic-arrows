@@ -101,7 +101,7 @@ public final class ArrowManager {
     private static long lastPlacementSignature = Long.MIN_VALUE;
     private static ClientWorld lastWorld;
     private static BlockPos lastPlayerPos;
-    private static Set<Item> lastAvailable = Set.of();
+    private static Map<Item, Integer> lastCounts = Map.of();
     private static int lastMergeTick;
     private static boolean needsMerge = true;
 
@@ -136,7 +136,7 @@ public final class ArrowManager {
         lastConfigSignature = Integer.MIN_VALUE;
         lastPlacementSignature = Long.MIN_VALUE;
         lastPlayerPos = null;
-        lastAvailable = Set.of();
+        lastCounts = Map.of();
         lastMergeTick = 0;
         needsMerge = true;
     }
@@ -217,11 +217,11 @@ public final class ArrowManager {
 
         drainResults();
 
-        Set<Item> available = availableItems(player);
-        if (!available.equals(lastAvailable)) {
+        Map<Item, Integer> counts = availableCounts(player);
+        if (!counts.equals(lastCounts)) {
             // Inventory changes never rescan: the merge step filters by the items carried.
             needsMerge = true;
-            lastAvailable = Set.copyOf(available);
+            lastCounts = Map.copyOf(counts);
         }
 
         submitChunks(world, schematicWorld, schematicChunks, collectBoxes(placements, world), config);
@@ -231,7 +231,7 @@ public final class ArrowManager {
             needsMerge = true;
         }
         if (needsMerge && tick - lastMergeTick >= MERGE_INTERVAL_TICKS) {
-            merge(player, config, available);
+            merge(player, config, counts);
             lastMergeTick = tick;
             needsMerge = false;
         }
@@ -403,7 +403,7 @@ public final class ArrowManager {
         }
     }
 
-    private static void merge(ClientPlayerEntity player, ArrowsConfig config, Set<Item> available) {
+    private static void merge(ClientPlayerEntity player, ArrowsConfig config, Map<Item, Integer> counts) {
         List<Target> missing = new ArrayList<>();
         List<Target> wrong = new ArrayList<>();
         double playerX = player.getX();
@@ -411,7 +411,7 @@ public final class ArrowManager {
         double playerZ = player.getZ();
         for (ChunkScan scan : CACHE.values()) {
             for (Target target : scan.targets()) {
-                if (target.kind() == Kind.MISSING && !available.contains(target.item())) {
+                if (target.kind() == Kind.MISSING && counts.getOrDefault(target.item(), 0) <= 0) {
                     // The stack ran out since this chunk was scanned: hide the arrows now.
                     continue;
                 }
@@ -431,13 +431,27 @@ public final class ArrowManager {
         Comparator<Target> byDistance = Comparator.comparingDouble(Target::distSq);
         missing.sort(byDistance);
         wrong.sort(byDistance);
-        int maxMissing = Math.min(missing.size(), Math.max(1, config.maxArrows));
         int maxWrong = Math.min(wrong.size(), Math.max(1, config.maxBadMarkers));
+        int maxMissing = Math.max(1, config.maxArrows);
         TARGETS.clear();
-        TARGETS.ensureCapacity(maxWrong + maxMissing);
+        TARGETS.ensureCapacity(maxWrong + Math.min(missing.size(), maxMissing));
         // Wrongly placed blocks are the more urgent problem, so they are listed first.
         TARGETS.addAll(wrong.subList(0, maxWrong));
-        TARGETS.addAll(missing.subList(0, maxMissing));
+        // Never show more arrows for an item than the player can actually place.
+        Map<Item, Integer> remaining = new HashMap<>(counts);
+        int accepted = 0;
+        for (Target target : missing) {
+            if (accepted >= maxMissing) {
+                break;
+            }
+            int left = remaining.getOrDefault(target.item(), 0);
+            if (left <= 0) {
+                continue;
+            }
+            remaining.put(target.item(), left - 1);
+            TARGETS.add(target);
+            accepted++;
+        }
     }
 
     private static void ensureExecutor(int threads) {
@@ -502,19 +516,17 @@ public final class ArrowManager {
         return all == null ? List.of() : all;
     }
 
-    private static Set<Item> availableItems(ClientPlayerEntity player) {
-        Set<Item> items = new HashSet<>();
+    /** Counts how many blocks of each item the player can still place. */
+    private static Map<Item, Integer> availableCounts(ClientPlayerEntity player) {
+        Map<Item, Integer> counts = new HashMap<>();
         var inventory = player.getInventory();
+        // PlayerInventory#size() already covers the main slots, armour and the off hand.
         for (int i = 0; i < inventory.size(); i++) {
             ItemStack stack = inventory.getStack(i);
             if (!stack.isEmpty()) {
-                items.add(stack.getItem());
+                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
             }
         }
-        ItemStack offHand = player.getOffHandStack();
-        if (!offHand.isEmpty()) {
-            items.add(offHand.getItem());
-        }
-        return items;
+        return counts;
     }
 }
