@@ -32,16 +32,12 @@ public final class ArrowsConfigScreen extends GameOptionsScreen {
         ArrowsConfig config = ArrowsConfig.get();
 
         body.addHeader(Text.translatable("schematic_arrows.config.section.scope"));
-        body.addSingleOptionEntry(intOption("schematic_arrows.config.horizontal_radius", 4, 64,
-                config.horizontalRadius, value -> config.horizontalRadius = value));
-        body.addSingleOptionEntry(intOption("schematic_arrows.config.vertical_radius", 2, 32,
-                config.verticalRadius, value -> config.verticalRadius = value));
         body.addSingleOptionEntry(intOption("schematic_arrows.config.max_arrows", 8, 512,
                 config.maxArrows, value -> config.maxArrows = value));
-        body.addSingleOptionEntry(intOption("schematic_arrows.config.chunks_per_tick", 1, 8,
+        body.addSingleOptionEntry(intOption("schematic_arrows.config.chunks_per_tick", 1, 16,
                 config.chunksPerTick, value -> config.chunksPerTick = value));
-        body.addSingleOptionEntry(intOption("schematic_arrows.config.rescan_seconds", 10, 300,
-                config.rescanSeconds, value -> config.rescanSeconds = value));
+        body.addSingleOptionEntry(intOption("schematic_arrows.config.scan_threads", 0, 8,
+                config.scanThreads, value -> config.scanThreads = value));
         body.addSingleOptionEntry(booleanOption("schematic_arrows.config.only_selected",
                 config.onlySelectedPlacement, value -> config.onlySelectedPlacement = value));
 

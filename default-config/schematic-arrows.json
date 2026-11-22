@@ -1,11 +1,8 @@
 {
   "startEnabled": true,
-  "horizontalRadius": 24,
-  "verticalRadius": 12,
   "maxArrows": 96,
-  "chunksPerTick": 2,
-  "rescanSeconds": 60,
-  "scanBudget": 150000,
+  "chunksPerTick": 4,
+  "scanThreads": 2,
   "onlySelectedPlacement": false,
   "arrowRadius": 0.24,
   "arrowHeight": 0.38,

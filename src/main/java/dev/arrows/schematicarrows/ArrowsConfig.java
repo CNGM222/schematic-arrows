@@ -24,23 +24,14 @@ public final class ArrowsConfig {
     /** Whether arrows are shown right after the game starts. */
     public boolean startEnabled = true;
 
-    /** Horizontal search radius around the player, in blocks. */
-    public int horizontalRadius = 24;
-
-    /** Vertical search radius around the player, in blocks. */
-    public int verticalRadius = 12;
-
     /** Hard cap on highlighted blocks (nearest blocks win). */
     public int maxArrows = 96;
 
-    /** How many chunks may be rescanned per client tick. */
-    public int chunksPerTick = 2;
+    /** How many chunk scans may be submitted per client tick. */
+    public int chunksPerTick = 4;
 
-    /** Safety refresher: force a full rescan after this many seconds. */
-    public int rescanSeconds = 60;
-
-    /** Upper bound on inspected positions per rebuild. */
-    public int scanBudget = 150_000;
+    /** Worker threads used for chunk scanning. 0 = scan on the client thread. */
+    public int scanThreads = 2;
 
     /** Only look at the placement currently selected in Litematica. */
     public boolean onlySelectedPlacement = false;
@@ -104,12 +95,9 @@ public final class ArrowsConfig {
     public void resetDefaults() {
         ArrowsConfig defaults = new ArrowsConfig();
         startEnabled = defaults.startEnabled;
-        horizontalRadius = defaults.horizontalRadius;
-        verticalRadius = defaults.verticalRadius;
         maxArrows = defaults.maxArrows;
         chunksPerTick = defaults.chunksPerTick;
-        rescanSeconds = defaults.rescanSeconds;
-        scanBudget = defaults.scanBudget;
+        scanThreads = defaults.scanThreads;
         onlySelectedPlacement = defaults.onlySelectedPlacement;
         arrowRadius = defaults.arrowRadius;
         arrowHeight = defaults.arrowHeight;

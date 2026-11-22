@@ -54,8 +54,8 @@ public final class SchematicArrowsClient implements ClientModInitializer {
                 ArrowManager.forgetChunk(chunk.getPos().x, chunk.getPos().z));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ArrowManager.clear());
 
-        LOGGER.info("Schematic Arrows initialized (enabled={}, radius={})",
-                enabled, config.horizontalRadius);
+        LOGGER.info("Schematic Arrows initialized (enabled={}, scanThreads={}, chunksPerTick={})",
+                enabled, config.scanThreads, config.chunksPerTick);
     }
 
     public static boolean isEnabled() {
