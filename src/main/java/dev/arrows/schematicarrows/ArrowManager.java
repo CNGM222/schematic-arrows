@@ -212,7 +212,7 @@ public final class ArrowManager {
             IN_FLIGHT_KEYS.clear();
             IN_FLIGHT.set(0);
             needsMerge = true;
-            enqueuePlacementChunks(placements, schematicChunks);
+            enqueueForRadius(placements, schematicChunks, player, config.scanRadius);
         }
 
         drainResults();
@@ -226,9 +226,16 @@ public final class ArrowManager {
 
         submitChunks(world, schematicWorld, schematicChunks, collectBoxes(placements, world), config);
 
-        if (!player.getBlockPos().equals(lastPlayerPos)) {
-            lastPlayerPos = player.getBlockPos();
+        BlockPos playerPos = player.getBlockPos();
+        boolean changedChunk = lastPlayerPos == null
+                || (lastPlayerPos.getX() >> 4) != (playerPos.getX() >> 4)
+                || (lastPlayerPos.getZ() >> 4) != (playerPos.getZ() >> 4);
+        if (!playerPos.equals(lastPlayerPos)) {
+            lastPlayerPos = playerPos;
             needsMerge = true;
+        }
+        if (changedChunk && config.scanRadius > 0) {
+            enqueueForRadius(placements, schematicChunks, player, config.scanRadius);
         }
         if (needsMerge && tick - lastMergeTick >= MERGE_INTERVAL_TICKS) {
             merge(player, config, counts);
@@ -403,6 +410,31 @@ public final class ArrowManager {
         }
     }
 
+    /**
+     * Queues chunks to scan: the whole placement when {@code radius <= 0}, otherwise the
+     * square around the player. Chunks that already have a cached scan are skipped, so
+     * walking around does not rescan anything.
+     */
+    private static void enqueueForRadius(List<SchematicPlacement> placements, ChunkManagerSchematic schematicChunks,
+                                         ClientPlayerEntity player, int radius) {
+        if (radius <= 0) {
+            enqueuePlacementChunks(placements, schematicChunks);
+            return;
+        }
+        int minChunkX = (player.getBlockPos().getX() - radius) >> 4;
+        int maxChunkX = (player.getBlockPos().getX() + radius) >> 4;
+        int minChunkZ = (player.getBlockPos().getZ() - radius) >> 4;
+        int maxChunkZ = (player.getBlockPos().getZ() + radius) >> 4;
+        for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+            for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+                long key = ChunkPos.toLong(chunkX, chunkZ);
+                if (!CACHE.containsKey(key)) {
+                    DIRTY.add(key);
+                }
+            }
+        }
+    }
+
     private static void merge(ClientPlayerEntity player, ArrowsConfig config, Map<Item, Integer> counts) {
         List<Target> missing = new ArrayList<>();
         List<Target> wrong = new ArrayList<>();
@@ -488,6 +520,7 @@ public final class ArrowManager {
         int signature = config.showWrongBlocks ? 1 : 0;
         signature = signature * 31 + (config.showExtraBlocks ? 1 : 0);
         signature = signature * 31 + (config.onlySelectedPlacement ? 1 : 0);
+        signature = signature * 31 + config.scanRadius;
         return signature;
     }
 

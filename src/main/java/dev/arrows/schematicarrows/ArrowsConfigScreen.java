@@ -36,6 +36,8 @@ public final class ArrowsConfigScreen extends GameOptionsScreen {
                 config.maxArrows, value -> config.maxArrows = value));
         body.addSingleOptionEntry(intOption("schematic_arrows.config.chunks_per_tick", 1, 16,
                 config.chunksPerTick, value -> config.chunksPerTick = value));
+        body.addSingleOptionEntry(radiusOption("schematic_arrows.config.scan_radius",
+                config.scanRadius, value -> config.scanRadius = value));
         body.addSingleOptionEntry(intOption("schematic_arrows.config.scan_threads", 0,
                 ArrowsConfig.maxScanThreads(), config.scanThreads, value -> config.scanThreads = value));
         body.addSingleOptionEntry(booleanOption("schematic_arrows.config.only_selected",
@@ -122,6 +124,16 @@ public final class ArrowsConfigScreen extends GameOptionsScreen {
                         Text.literal(String.format(Locale.ROOT, "%.2f", percent / 100.0))),
                 new SimpleOption.ValidatingIntSliderCallbacks(minPercent, maxPercent),
                 current, percent -> setter.accept(percent / 100.0f));
+    }
+
+    private static SimpleOption<Integer> radiusOption(String key, int value, Consumer<Integer> setter) {
+        return new SimpleOption<>(key, SimpleOption.constantTooltip(Text.translatable(key + ".tooltip")),
+                (optionText, current) -> GameOptions.getGenericValueText(optionText,
+                        current == 0
+                                ? Text.translatable("schematic_arrows.config.scan_radius.all")
+                                : Text.literal(Integer.toString(current))),
+                new SimpleOption.ValidatingIntSliderCallbacks(0, 256),
+                value, setter);
     }
 
     private static SimpleOption<Boolean> booleanOption(String key, boolean value, Consumer<Boolean> setter) {

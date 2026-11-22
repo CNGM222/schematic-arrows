@@ -33,6 +33,9 @@ public final class ArrowsConfig {
     /** Worker threads used for chunk scanning. 0 = scan on the client thread. */
     public int scanThreads = 2;
 
+    /** Scan radius in blocks around the player. 0 = the whole placement. */
+    public int scanRadius = 0;
+
     /** Upper bound for {@link #scanThreads}: the number of logical CPU cores. */
     public static int maxScanThreads() {
         return Math.max(1, Runtime.getRuntime().availableProcessors());
@@ -103,6 +106,7 @@ public final class ArrowsConfig {
         maxArrows = defaults.maxArrows;
         chunksPerTick = defaults.chunksPerTick;
         scanThreads = defaults.scanThreads;
+        scanRadius = defaults.scanRadius;
         onlySelectedPlacement = defaults.onlySelectedPlacement;
         arrowRadius = defaults.arrowRadius;
         arrowHeight = defaults.arrowHeight;

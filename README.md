@@ -51,7 +51,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | MaLiLib | 1.21.11-0.27.20 |
 | Litematica | 1.21.11-0.26.16 |
 | Litematica Printer | 你平时自动放置用的那个版本 |
-| 本 mod | `schematic-arrows-1.4.0.jar` |
+| 本 mod | `schematic-arrows-1.5.1.jar` |
 
 启动游戏即可：**V** 开关箭头，**右 Shift** 打开设置界面（两个键都能在“选项 → 控制 → 按键绑定 → 原理图箭头”里改）。
 
@@ -88,6 +88,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | `startEnabled` | `true` | 进游戏时是否默认开启 |
 | `maxArrows` | `96` | 最多高亮多少方块（最近的优先） |
 | `chunksPerTick` | `4` | 每 tick 最多提交几个区块去扫描 |
+| `scanRadius` | `0` | 扫描半径（格）；0 = 整个投影。已缓存的箭头不会因离开范围被删 |
 | `scanThreads` | `2` | 扫描用的后台线程数；0 = 主线程扫描，上限 = CPU 线程数 |
 | `onlySelectedPlacement` | `false` | `true` = 只处理 Litematica 里当前选中的投影 |
 | `arrowRadius` | `0.24` | 箭头头的半宽（格） |
@@ -154,7 +155,7 @@ build.cmd build
 
 `build.cmd` 会优先用本地的 `..\tools\gradle-9.9.2`，没有就用 PATH 里的 `gradle`。
 
-产物：`build/libs/schematic-arrows-1.4.0.jar`
+产物：`build/libs/schematic-arrows-1.5.1.jar`
 
 `libs/` 里的 Litematica / MaLiLib jar 只用于编译（`modCompileOnly`），不会被打进成品。
 
