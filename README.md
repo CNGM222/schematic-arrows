@@ -11,6 +11,8 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 
 > 上图是同一套几何的离线预览（软件渲染），不是游戏截图。
 
+下载：[Releases](https://github.com/CNGM222/schematic-arrows/releases) · 源码：[GitHub](https://github.com/CNGM222/schematic-arrows)
+
 ## 它怎么工作
 
 1. 读取 Litematica 当前所有启用中的投影（Placement），拿到每个子区域的包围盒；
