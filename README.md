@@ -51,7 +51,7 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | MaLiLib | 1.21.11-0.27.20 |
 | Litematica | 1.21.11-0.26.16 |
 | Litematica Printer | 你平时自动放置用的那个版本 |
-| 本 mod | `schematic-arrows-1.5.2.jar` |
+| 本 mod | `schematic-arrows-1.5.3.jar` |
 
 启动游戏即可：**V** 开关箭头，**右 Shift** 打开设置界面（两个键都能在“选项 → 控制 → 按键绑定 → 原理图箭头”里改）。
 
@@ -108,7 +108,8 @@ Minecraft **1.21.11** · Fabric · 纯客户端 mod
 | `maxBadMarkers` | `64` | 最多同时标出多少个错误方块 |
 | `badMarkerSize` | `0.20` | X 标记的一半尺寸（格） |
 
-箭头始终朝向玩家（绕竖直轴 billboard），走动时也一眼能看清指向。
+箭头始终朝向玩家（按相机水平朝向做单轴 billboard），并且**始终保持水平**：抬头、低头都不会让箭头
+跟着俯仰，箭头的上下边也始终平行于屏幕。所有箭头共用同一个朝向，不会随方块位置各自乱转。
 
 颜色字段是**带符号的 32 位整数**（ARGB，前两位十六进制是透明度）。改颜色时可以用计算器把
 `0xAARRGGBB` 换算成有符号 int，例如上面的绿色 `0xFF63F58B` 就是 `-10226293`。
@@ -155,7 +156,7 @@ build.cmd build
 
 `build.cmd` 会优先用本地的 `..\tools\gradle-9.9.2`，没有就用 PATH 里的 `gradle`。
 
-产物：`build/libs/schematic-arrows-1.5.2.jar`
+产物：`build/libs/schematic-arrows-1.5.3.jar`
 
 `libs/` 里的 Litematica / MaLiLib jar 只用于编译（`modCompileOnly`），不会被打进成品。
 

@@ -22,8 +22,10 @@ import java.util.List;
  *       block is never confused with one that still has to be placed.</li>
  * </ul>
  *
- * <p>All markers are billboarded around the vertical axis, so they keep facing
- * the player while walking around the build.</p>
+ * <p>All markers share one orientation: the plane of the camera's horizontal
+ * look direction. They therefore keep facing the player while walking around
+ * the build, stay perfectly level (pitch never tilts them), and their top and
+ * bottom edges are parallel to the screen's horizontal axis.</p>
  */
 public final class ArrowRenderer {
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("schematic-arrows");
@@ -62,6 +64,10 @@ public final class ArrowRenderer {
         }
         ArrowsConfig config = ArrowsConfig.get();
         Vec3d camera = client.gameRenderer.getCamera().getCameraPos();
+        // One shared, purely horizontal "to the player's right" axis. Using the
+        // camera yaw instead of the per-block direction keeps every marker in a
+        // plane parallel to the screen, so looking up or down never tilts them.
+        Vec3d right = billboardRight(client.gameRenderer.getCamera().getYaw());
 
         matrices.push();
         matrices.translate(-camera.x, -camera.y, -camera.z);
@@ -80,10 +86,10 @@ public final class ArrowRenderer {
 
             if (target.kind() == ArrowManager.Kind.MISSING) {
                 // Arrow above the block: body upwards, tip pointing down at the block.
-                arrow(buffer, entry, camera, cx, cz, blockY + 1.0 + config.arrowGap + bob,
+                arrow(buffer, entry, right, cx, cz, blockY + 1.0 + config.arrowGap + bob,
                         +1, config.aboveColor, width, config);
                 // Arrow below the block: body downwards, tip pointing up at the block.
-                arrow(buffer, entry, camera, cx, cz, blockY - config.arrowGap - bob,
+                arrow(buffer, entry, right, cx, cz, blockY - config.arrowGap - bob,
                         -1, config.belowColor, width, config);
                 if (config.drawBox) {
                     VertexRendering.drawOutline(matrices, buffer, VoxelShapes.fullCube(),
@@ -92,8 +98,8 @@ public final class ArrowRenderer {
             } else {
                 int color = target.kind() == ArrowManager.Kind.WRONG ? config.wrongColor : config.extraColor;
                 double half = Math.max(0.05, config.badMarkerSize);
-                cross(buffer, entry, camera, cx, cz, blockY + 1.0 + config.arrowGap + half, half, color, width);
-                cross(buffer, entry, camera, cx, cz, blockY - config.arrowGap - half, half, color, width);
+                cross(buffer, entry, right, cx, cz, blockY + 1.0 + config.arrowGap + half, half, color, width);
+                cross(buffer, entry, right, cx, cz, blockY - config.arrowGap - half, half, color, width);
                 if (config.drawBox) {
                     int boxColor = (color & 0xFFFFFF) | 0x66000000;
                     VertexRendering.drawOutline(matrices, buffer, VoxelShapes.fullCube(),
@@ -110,10 +116,9 @@ public final class ArrowRenderer {
      * @param direction +1 if the arrow body extends upwards (arrow pointing down),
      *                  -1 if the body extends downwards (arrow pointing up)
      */
-    private static void arrow(VertexConsumer buffer, MatrixStack.Entry entry, Vec3d camera,
+    private static void arrow(VertexConsumer buffer, MatrixStack.Entry entry, Vec3d right,
                               double cx, double cz, double tipY, int direction,
                               int color, float width, ArrowsConfig config) {
-        Vec3d right = rightVector(camera, cx, cz);
         double half = Math.max(0.02, config.arrowRadius);
         double baseY = tipY + direction * Math.max(0.05, config.arrowHeight);
         double leftX = cx - right.x * half;
@@ -132,10 +137,9 @@ public final class ArrowRenderer {
     }
 
     /** A billboarded X centred at (cx, centerY, cz). */
-    private static void cross(VertexConsumer buffer, MatrixStack.Entry entry, Vec3d camera,
+    private static void cross(VertexConsumer buffer, MatrixStack.Entry entry, Vec3d right,
                               double cx, double cz, double centerY, double half,
                               int color, float width) {
-        Vec3d right = rightVector(camera, cx, cz);
         line(buffer, entry,
                 cx - right.x * half, centerY - half, cz - right.z * half,
                 cx + right.x * half, centerY + half, cz + right.z * half, color, width);
@@ -144,14 +148,17 @@ public final class ArrowRenderer {
                 cx + right.x * half, centerY - half, cz + right.z * half, color, width);
     }
 
-    /** Horizontal vector pointing to the player's right, for billboarding. */
-    private static Vec3d rightVector(Vec3d camera, double cx, double cz) {
-        Vec3d facing = new Vec3d(camera.x - cx, 0.0, camera.z - cz);
-        if (facing.lengthSquared() < 1.0e-4) {
-            facing = new Vec3d(0.0, 0.0, 1.0);
-        }
-        facing = facing.normalize();
-        return new Vec3d(-facing.z, 0.0, facing.x).normalize();
+    /**
+     * Horizontal vector pointing to the player's right, derived from the camera
+     * yaw only. Pitch is deliberately ignored, so markers never tilt with the
+     * view and their horizontal edges stay parallel to the screen.
+     */
+    private static Vec3d billboardRight(float yawDegrees) {
+        double yaw = Math.toRadians(yawDegrees);
+        // Minecraft horizontal look direction for a yaw angle.
+        double lookX = -Math.sin(yaw);
+        double lookZ = Math.cos(yaw);
+        return new Vec3d(-lookZ, 0.0, lookX);
     }
 
     private static void line(VertexConsumer buffer, MatrixStack.Entry entry,
